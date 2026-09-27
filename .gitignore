@@ -1,0 +1,4 @@
+__pycache__/
+*.msi
+*.exe
+.DS_Store

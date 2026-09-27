@@ -254,3 +254,45 @@ class GenFlowModel:
     def calibrated_estimator(self) -> CalibratedClassifierCV:
         """Alt sklearn sarmalayıcısına doğrudan erişim (train.py / analiz için)."""
         return self._calibrated_model
+    
+import numpy as np
+from sklearn.ensemble import IsolationForest
+
+class SessizMutasyonModel:
+    """Sessiz (Synonymous) varyantlar için Anomali Tespit Sınıfı."""
+    def __init__(self, contamination=0.01, random_state=42):
+        self.model = IsolationForest(contamination=contamination, random_state=random_state)
+        self._is_fitted = False
+        self.optimal_threshold_ = 0.5 
+
+    def fit(self, X):
+        print("🧠 Sessiz Mutasyonlar (Isolation Forest) eğitiliyor...")
+        self.model.fit(X)
+        self._is_fitted = True
+        return self
+
+    def predict(self, X):
+        if not self._is_fitted: raise ValueError("Model henüz eğitilmedi!")
+        preds = self.model.predict(X)
+        return np.where(preds == -1, 1, 0)
+
+    def predict_proba(self, X):
+        """
+        Arayüzün 0-100 arasında klinik (sürekli) bir risk skoru üretebilmesi için,
+        varyantın sağlıklı popülasyona olan uzaklık skorunu Sigmoid eğrisi ile olasılığa büker.
+        """
+        if not self._is_fitted: 
+            return np.array([[0.5, 0.5]] * len(X))
+        
+        # decision_function: Pozitif = Sağlıklı Merkeze Yakın, Negatif = Anomali (Uzak)
+        scores = self.model.decision_function(X)
+        
+        # Sigmoid dönüşümü: Anomali uzaklığını 0.0 ile 1.0 arasında bir yüzdelik prime çevirir.
+        # k=15 faktörü, geçişi klinik olarak yumuşatır.
+        k = 15 
+        risk = 1 / (1 + np.exp(scores * k))
+        
+        proba = np.zeros((len(X), 2))
+        proba[:, 1] = risk       # Patojenik (Anomali) Olasılığı
+        proba[:, 0] = 1 - risk   # Benign (Sağlıklı) Olasılığı
+        return proba
